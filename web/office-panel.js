@@ -52,6 +52,7 @@ const OfficePanel = (() => {
     }
     return box;
   }
+  const AGENT_CHIP = { gpt: "GPT", deepseek: "DS" };
   function item(d) {
     const open = d.id === P.sel, mode = modeOf(d), cls = STATUS[mode];
     const li = el("li", "o-person" + (open ? " open" : ""));
@@ -59,8 +60,14 @@ const OfficePanel = (() => {
     const head = el("button", "o-head");
     head.type = "button";
     head.setAttribute("aria-expanded", open ? "true" : "false");
-    head.append(dot(OfficeLife.colorOf(d.name)), el("b", null, d.name), el("span", `o-chip ${cls}`, t("status." + mode)));
+    head.append(dot(OfficeLife.colorOf(d.name)), el("b", null, d.nick || d.name));
+    if (d.nick) head.append(el("span", "o-proj", d.name));
+    head.append(el("span", `o-chip ${cls}`, t("status." + mode)));
     if (d.subCount) head.append(el("span", "o-chip sub", t("chip.subs", { n: d.subCount })));
+    for (const a of d.agents || []) {             // Claude 혼자면 칩 없음 — 지금 모양 그대로
+      if (!AGENT_CHIP[a]) continue;
+      head.append(el("span", `o-chip ag-${a}` + ((d.working || []).includes(a) ? " on" : ""), AGENT_CHIP[a]));
+    }
     head.onclick = () => P.pick?.(d.id);
     li.append(head);
     const w = what(d, open);
@@ -112,7 +119,7 @@ const OfficePanel = (() => {
         const uid = uidOf(d, e);
         now.add(uid);
         if (P.seen.has(uid) || P.items.some(x => x.uid === uid) || P.queue.some(x => x.uid === uid)) continue;
-        const row = { uid, at: ms, id: d.id, name: d.name, color: OfficeLife.colorOf(d.name), act: { k: e.k, a: e.a } };
+        const row = { uid, at: ms, id: d.id, name: d.nick || d.name, color: OfficeLife.colorOf(d.name), act: { k: e.k, a: e.a } };
         if (P.primed) P.queue.push(row); else add(row, true);
       }
     }

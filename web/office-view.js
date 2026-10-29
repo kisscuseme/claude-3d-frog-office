@@ -53,7 +53,7 @@
   const t = (k, v) => I18N.t(k, v);
   const $ = id => document.getElementById(id);
   const st = { imgs: null, loaded: false, failImg: false, failNet: false, cells: new Map(), raf: 0, last: 0,
-               people: null, meta: null, sel: null, view: { s: 1, ox: 0, oy: 0, dpr: 1, small: false }, parts: [] };
+               people: null, meta: null, sel: null, tags: [], view: { s: 1, ox: 0, oy: 0, dpr: 1, small: false }, parts: [] };
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
@@ -236,13 +236,17 @@
 
   // ---------- 글씨 — 이름표(발밑)·말풍선(머리 위) ----------
   function roundBox(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, w, h, r); }
+  const AGENT_MARK = { gpt: ["GPT", "#10A37F"], deepseek: ["DS", "#4D6BFE"] };
   function nameTags(ctx) {
     const tags = [], fs = st.view.small ? 10 : 12, th = fs + 6;
     ctx.font = `600 ${fs}px ${FONT}`;
     for (const p of L.people.values()) {
       if (!p.box || p.alpha < 0.3) continue;
       const [x, y] = scr(p.x, p.feet);
-      tags.push({ p, x, y: y + 3, w: ctx.measureText(p.name).width + 18, h: th });
+      const marks = (p.working || []).filter(a => AGENT_MARK[a]);   // Claude 말고 지금 일하는 에이전트(GPT·DS)
+      const mw = marks.reduce((w, a) => w + ctx.measureText(AGENT_MARK[a][0]).width + 8, 0);
+      const label = p.nick || p.name;
+      tags.push({ p, x, y: y + 3, w: ctx.measureText(label).width + 18 + mw, h: th, marks, label });
     }
     tags.sort((a, b) => a.y - b.y);
     const placed = [];
@@ -261,8 +265,17 @@
       ctx.fillStyle = on ? inkOn(g.p.color) : g.p.color;
       ctx.beginPath(); ctx.arc(lx + 8, g.y + g.h / 2 + 0.5, 3, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = on ? inkOn(g.p.color) : "#1E2622"; ctx.textBaseline = "middle"; ctx.font = `${on ? 800 : 600} ${fs}px ${FONT}`;
-      ctx.fillText(g.p.name, lx + 14, g.y + g.h / 2 + 1);
+      ctx.fillText(g.label, lx + 14, g.y + g.h / 2 + 1);
+      let mx = lx + 18 + ctx.measureText(g.label).width;
+      ctx.font = `800 ${fs - 2}px ${FONT}`;
+      for (const a of g.marks) {
+        const [txt, col] = AGENT_MARK[a], w = ctx.measureText(txt).width + 6;
+        ctx.fillStyle = col; roundBox(ctx, mx - 3, g.y + 3, w, g.h - 6, 2); ctx.fill();
+        ctx.fillStyle = "#FFFFFF"; ctx.fillText(txt, mx, g.y + g.h / 2 + 1);
+        mx += w + 2;
+      }
     }
+    st.tags = placed;
   }
   function bubbles(ctx) {
     const items = [], fs = st.view.small ? 11 : 13;
@@ -425,9 +438,20 @@
                        subs: Array.isArray(d.subs) ? d.subs : [], log: Array.isArray(d.log) ? d.log : [] });
   const toLife = d => ({
     id: d.id, name: d.name, status: d.status, ask: d.ask, kid: d.kid, home: d.home, commits: d.commits, path: d.path,
-    doing: I18N.act(d.doing), subCount: d.subCount || 0,
+    nick: d.nick, doing: I18N.act(d.doing), subCount: d.subCount || 0, working: Array.isArray(d.working) ? d.working : [],
     subs: d.subs.map(s => ({ id: String(s.id), type: s.type || "", desc: s.desc || "", doing: I18N.act(s.doing) })),
   });
+  // 별칭 — 설정 alias 가 먼저, 없으면 이름으로 고른 칸(겹치면 다음 칸). 같은 사람들이면 늘 같은 별칭
+  function nickAll(people) {
+    const pool = I18N.nicks(), used = new Set(people.map(p => p.alias).filter(Boolean));
+    for (const p of [...people].sort((a, b) => (a.id < b.id ? -1 : 1))) {
+      if (p.alias) { p.nick = String(p.alias); continue; }
+      let i = OfficeLife.hash(p.name) % pool.length;
+      for (let k = 0; k < pool.length && used.has(pool[i]); k++) i = (i + 1) % pool.length;
+      p.nick = pool[i];
+      used.add(p.nick);
+    }
+  }
   async function load() {
     if (document.hidden) return;
     try {
@@ -435,6 +459,7 @@
       if (!res.ok) throw new Error(String(res.status));
       const body = await res.json();
       const people = (Array.isArray(body?.people) ? body.people : []).filter(d => d && (d.id || d.path || d.name)).map(norm);
+      nickAll(people);
       st.people = people;
       st.meta = { hooks: body.hooks !== false, demo: !!body.demo };
       st.failNet = false;
@@ -518,7 +543,13 @@
     OfficePanel.onPick((id, keep) => select(id, keep));
     const cv = $("office-canvas");
     cv.addEventListener("click", ev => select(hit(ev)));
-    cv.addEventListener("mousemove", ev => { cv.style.cursor = hit(ev) ? "pointer" : "default"; });
+    cv.addEventListener("mousemove", ev => {
+      const id = hit(ev), r = cv.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+      const tag = [...st.tags].reverse().find(g => x >= g.x - g.w / 2 && x <= g.x + g.w / 2 && y >= g.y && y <= g.y + g.h);
+      cv.style.cursor = id ? "pointer" : "default";
+      cv.title = (tag?.p || L.people.get(id))?.name || "";
+    });
+    cv.addEventListener("mouseleave", () => { cv.title = ""; });
     new ResizeObserver(layout).observe($("office-box"));
     document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
     loadImages();

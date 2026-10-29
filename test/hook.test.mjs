@@ -12,6 +12,8 @@ const HOOK = fileURLToPath(new URL('../hooks/office-hook.mjs', import.meta.url))
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'office-hook-'));
 process.env.CLAUDE_OFFICE_HOME = path.join(tmp, 'home');
 process.env.CLAUDE_CONFIG_DIR = path.join(tmp, 'cfg');
+process.env.CODEX_HOME = path.join(tmp, 'codex');
+process.env.XDG_DATA_HOME = path.join(tmp, 'data');
 process.env.CLAUDE_OFFICE_PORT = '1'; // 혹시라도 서버를 찾으면 아무도 없는 포트
 fs.mkdirSync(process.env.CLAUDE_OFFICE_HOME, { recursive: true });
 fs.writeFileSync(path.join(process.env.CLAUDE_OFFICE_HOME, 'config.json'), JSON.stringify({ autoStart: false }));

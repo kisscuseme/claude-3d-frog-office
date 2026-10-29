@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  LOG_N, describe, forget, lastState, oneLine, readTranscript, runningSubagents, scanChunk, stats, subagentRunning,
+  LOG_N, describe, forget, shellAct, lastState, oneLine, readTranscript, runningSubagents, scanChunk, stats, subagentRunning,
 } from '../server/activity.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'office-act-'));
@@ -30,7 +30,8 @@ test('describe: 표의 Act 종류 전부', () => {
     [tool('NotebookEdit', { notebook_path: '/a/n.ipynb' }), { k: 'edit', a: 'n.ipynb' }],
     [tool('Write', { file_path: '/a/w.md' }), { k: 'write', a: 'w.md' }],
     [tool('Bash', { command: 'npm test', description: 'Run tests' }), { k: 'bash', a: 'Run tests' }],
-    [tool('Bash', { command: 'x'.repeat(50) }), { k: 'bash', a: 'x'.repeat(39) + '…' }],
+    [tool('Bash', { command: 'x'.repeat(50) }), { k: 'shell', a: 'x'.repeat(19) + '…' }],
+    [tool('Bash', { command: 'cd /w && npm test 2>&1 | tail -5' }), { k: 'test', a: '' }],
     [tool('Grep', { pattern: 'TODO' }), { k: 'grep', a: 'TODO' }],
     [tool('Glob', { pattern: 'src/**/*.ts' }), { k: 'glob', a: 'src/**/*.ts' }],
     [tool('WebFetch', { url: 'https://example.com/a?b' }), { k: 'fetch', a: 'example.com' }],
@@ -44,6 +45,19 @@ test('describe: 표의 Act 종류 전부', () => {
     [tool('SomethingNew', {}), { k: 'tool', a: 'SomethingNew' }],
   ];
   for (const [block, want] of cases) assert.deepEqual(describe(block), want, JSON.stringify(block));
+});
+
+test('shellAct: 명령 원문 대신 무슨 일인지', () => {
+  const cases = [
+    ['timeout 30 npx vitest run', 'test', ''], ['node --test', 'test', ''], ['npx eslint .', 'check', ''],
+    ['echo hi && cargo build --release', 'build', ''], ['pnpm install', 'install', ''], ['npm run dev', 'serve', ''],
+    ['git status --short', 'gitlook', ''], ['git commit -m x', 'gitsave', ''], ['git push', 'gitsync', ''],
+    ['gh pr view 3', 'github', ''], ['sed -n 1,80p server/config.mjs', 'read', 'config.mjs'], ['rg -n foo src', 'look', ''],
+    ['curl -s https://example.com/a', 'fetch', 'example.com'], ['ego-browser nodejs', 'browser', ''],
+    ['mkdir -p /tmp/a', 'files', ''], ['sleep 2', 'wait', ''], ['python3 -I tool.py', 'run', 'tool.py'],
+    ['shasum a b', 'shell', 'shasum'], ['', 'shell', ''],
+  ];
+  for (const [cmd, k, a] of cases) assert.deepEqual(shellAct(cmd), { k, a }, cmd);
 });
 
 test('describe: 생각·빈 글·모르는 모양은 건너뛴다', () => {

@@ -42,6 +42,56 @@ function hostOf(url) {
   }
 }
 
+const SKIP_CMD = /^(cd|export|set|source|\.|pushd|popd|true|echo)$/;
+const GIT_LOOK = /^(status|diff|log|show|blame|branch|rev-parse|ls-files|grep|describe|shortlog|reflog)$/;
+const GIT_SYNC = /^(push|pull|fetch|clone|remote)$/;
+const RUNNERS = /^(node|python3?|deno|bun|ruby|bash|sh|zsh|tsx|ts-node|perl|php)$/;
+const PKG = /^(npm|pnpm|yarn|bun|npx|pip3?|uv|cargo|go|brew|make|gradle|mvn|poetry)$/;
+
+/**
+ * 셸 명령 → 무슨 일인지(테스트·빌드·설치·git…) 고른 Act. 명령 원문은 말풍선에 띄우지 않는다.
+ * shortcut: 흔한 명령만 알아본다, 모르는 건 프로그램 이름만 보여 준다(k: shell).
+ */
+export function shellAct(cmd) {
+  const all = String(cmd || '').trim();
+  // 'cd x && npm test | tail' 에서 본론(npm test)을 고른다
+  const segs = all.split(/\s*(?:&&|\|\||;|\n)\s*/).map((s) => s.split(/\s\|\s?/)[0].trim()).filter(Boolean);
+  let words = [];
+  for (const seg of segs) {
+    words = seg.split(/\s+/).filter((w) => !/^[A-Za-z_]\w*=/.test(w));
+    while (/^(sudo|time|timeout|env|nohup|exec|command)$/.test(words[0] || '')) words.shift();
+    while (words[0] && /^\d+[smh]?$/.test(words[0])) words.shift(); // timeout 30 …
+    if (words.length && !SKIP_CMD.test(baseName(words[0]))) break;
+  }
+  if (!words.length) return { k: 'shell', a: '' };
+  const prog = baseName(words[0]);
+  const rest = words.slice(1).join(' ');
+  const line = words.join(' ');
+  const file = () => baseName([...words].reverse().find((w, i) => i < words.length - 1 && !w.startsWith('-') && /[./]/.test(w)) || '');
+  if (/(^|\s)(test|pytest|jest|vitest|mocha|playwright test)\b|--test\b|\b(go|cargo) test\b/.test(line)) return { k: 'test', a: '' };
+  if (/\b(eslint|lint|tsc|typecheck|prettier|ruff|mypy|clippy|vet)\b/.test(line)) return { k: 'check', a: '' };
+  if (/\bbuild\b/.test(line) || prog === 'make' || prog === 'cmake') return { k: 'build', a: '' };
+  if (PKG.test(prog) && /^(install|i|add|ci|get|sync)\b/.test(rest)) return { k: 'install', a: '' };
+  if (PKG.test(prog) && /^(run\s+)?(dev|start|serve|preview)\b/.test(rest)) return { k: 'serve', a: '' };
+  if (prog === 'git') {
+    const sub = words.find((w, i) => i > 0 && !w.startsWith('-')) || '';
+    return { k: GIT_LOOK.test(sub) ? 'gitlook' : GIT_SYNC.test(sub) ? 'gitsync' : 'gitsave', a: '' };
+  }
+  if (prog === 'gh') return { k: 'github', a: '' };
+  if (/^(cat|head|tail|less|more|bat|nl)$/.test(prog) || (prog === 'sed' && /(^|\s)-n\b/.test(rest))) return { k: 'read', a: file() };
+  if (/^(rg|grep|ag|ack|ls|find|fd|tree|wc|du|stat|file|which|codegraph)$/.test(prog)) return { k: 'look', a: '' };
+  if (/^(curl|wget|http)$/.test(prog)) return { k: 'fetch', a: hostOf(words.find((w) => /^https?:\/\//.test(w))) };
+  if (/browser|chrome|playwright|puppeteer/.test(prog)) return { k: 'browser', a: '' };
+  if (/^(mkdir|cp|mv|rm|touch|chmod|ln|rsync|tar|unzip|zip)$/.test(prog)) return { k: 'files', a: '' };
+  if (prog === 'sleep') return { k: 'wait', a: '' };
+  if (RUNNERS.test(prog)) {
+    const script = words.slice(1).find((w) => !w.startsWith('-') && /\.\w+$/.test(w));
+    return script ? { k: 'run', a: baseName(script) } : { k: 'shell', a: prog };
+  }
+  if (PKG.test(prog) && /^run\s+\S+/.test(rest)) return { k: 'run', a: oneLine(rest.split(/\s+/)[1], 24) };
+  return { k: 'shell', a: oneLine(prog, 20) };
+}
+
 /** assistant 블록 하나 → Act({k, a}). 생각(thinking)·빈 글·모르는 모양은 null */
 export function describe(block) {
   if (!block || typeof block !== 'object') return null;
@@ -59,7 +109,8 @@ export function describe(block) {
       return { k: 'edit', a: baseName(inp.file_path || inp.notebook_path) };
     case 'Write': return { k: 'write', a: baseName(inp.file_path) };
     case 'Bash':
-      return { k: 'bash', a: inp.description ? oneLine(inp.description, 44) : oneLine(inp.command, 40) };
+      // description 은 Claude 가 쓴 자연어 — 있으면 그대로, 없으면 명령을 보고 짐작한다
+      return inp.description ? { k: 'bash', a: oneLine(inp.description, 44) } : shellAct(inp.command);
     case 'Grep': return { k: 'grep', a: oneLine(inp.pattern, 24) };
     case 'Glob': return { k: 'glob', a: oneLine(inp.pattern, 28) };
     case 'WebFetch': return { k: 'fetch', a: hostOf(inp.url) };

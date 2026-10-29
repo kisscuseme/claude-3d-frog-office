@@ -15,6 +15,8 @@ const SERVER = fileURLToPath(new URL('../server/server.mjs', import.meta.url));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'office-server-'));
 process.env.CLAUDE_CONFIG_DIR = path.join(tmp, 'cfg');
 process.env.CLAUDE_OFFICE_HOME = path.join(tmp, 'home');
+process.env.CODEX_HOME = path.join(tmp, 'codex');
+process.env.XDG_DATA_HOME = path.join(tmp, 'data');
 fs.mkdirSync(path.join(tmp, 'cfg', 'projects'), { recursive: true });
 
 // 가짜 web/ — 다른 담당의 실제 화면 파일과 무관하게 시험한다

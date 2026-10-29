@@ -8,12 +8,13 @@ import { cardAlive, processStarts } from './liveness.mjs';
 import { cleanupCards, mtimeOf, readCards, recentTranscripts, transcriptFor } from './sessions.mjs';
 import { LOG_N, MAX_SUBS, oneLine, readTranscript, runningSubagents } from './activity.mjs';
 import { installedEvents } from './hooks-config.mjs';
+import { otherSessions } from './others.mjs';
 
 export const API_VERSION = 1;
 const GIT_TTL_MS = 10 * 60 * 1000; // 루트·커밋 수는 10분 캐시 — git 을 3초마다 두드리지 않게
 const ANSWERED_MS = 1500; // 결재 카드보다 대화가 이만큼 뒤에 움직였으면 사용자가 답한 것
 const END_QUIET_MS = 5000; // end_turn 뒤 이만큼 조용하면 쉬는 중(Esc·Stop 훅 누락 대비)
-const FALLBACK_WORKING_MS = 10 * 60 * 1000; // 대체 모드: 이만큼 조용하면 일 안 하는 것으로 본다
+export const FALLBACK_WORKING_MS = 10 * 60 * 1000; // 대체 모드: 이만큼 조용하면 일 안 하는 것으로 본다
 const CLEANUP_EVERY_MS = 10 * 60 * 1000;
 const ASK_CHARS = 80;
 const PRIORITY = { decision: 0, working: 1, rest: 2 };
@@ -100,6 +101,12 @@ function matches(list, name, key) {
   return list.some((x) => nameKey(x) === nameKey(name) || pathKey(x) === key);
 }
 
+/** 설정 aliases 에서 고른 별칭 — 없으면 null(화면이 이름으로 하나 지어 준다) */
+function aliasOf(aliases, name, key) {
+  for (const [k, v] of Object.entries(aliases)) if (nameKey(k) === nameKey(name) || pathKey(k) === key) return v;
+  return null;
+}
+
 function homeOf(homes, name, key) {
   for (const [k, v] of Object.entries(homes)) {
     if (v === 'server' && (nameKey(k) === nameKey(name) || pathKey(k) === key)) return 'server';
@@ -123,6 +130,7 @@ function collectSessions(cfg, now, starts) {
     const status = cardStatus(card, info.last, now);
     out.push({
       cwd,
+      agent: 'claude',
       status,
       ask: status === 'decision' ? oneLine(card.message, ASK_CHARS) : '',
       at: Date.parse(String(card.updatedAt || '')) || 0,
@@ -136,7 +144,7 @@ function collectSessions(cfg, now, starts) {
       if (known.has(t.sessionId)) continue;
       const info = readTranscript(t.file);
       if (!info.cwd) continue;
-      out.push({ cwd: info.cwd, status: transcriptStatus(info.last, t.mtimeMs, now), ask: '', at: t.mtimeMs, source: 'transcript', transcript: t.file, info });
+      out.push({ cwd: info.cwd, agent: 'claude', status: transcriptStatus(info.last, t.mtimeMs, now), ask: '', at: t.mtimeMs, source: 'transcript', transcript: t.file, info });
     }
   }
   return { sessions: out, cardCount: cards.length };
@@ -152,6 +160,7 @@ export async function buildSnapshot(opts = {}) {
   }
   const starts = opts.starts !== undefined ? opts.starts : processStarts(now);
   const { sessions, cardCount } = collectSessions(cfg, now, starts);
+  if (cfg.fallbackMinutes > 0) sessions.push(...await otherSessions(cfg.fallbackMinutes, now, FALLBACK_WORKING_MS));
 
   const cwds = [...new Set(sessions.map((s) => s.cwd))];
   const roots = new Map(await Promise.all(cwds.map(async (c) => [c, await gitRoot(c, now)])));
@@ -170,7 +179,7 @@ export async function buildSnapshot(opts = {}) {
     const status = items.map((s) => s.status).sort((a, b) => PRIORITY[a] - PRIORITY[b])[0];
     const asks = items.filter((s) => s.status === 'decision').sort((a, b) => b.at - a.at);
     const commits = await commitCount(root, now);
-    const subs = items.flatMap((s) => runningSubagents(s.transcript, now));
+    const subs = items.filter((s) => s.agent === 'claude').flatMap((s) => runningSubagents(s.transcript, now));
     // 한 프로젝트에 대화가 둘 이상이면(탭·/clear 직후) 가장 최근에 움직인 쪽이 '지금 하는 일'
     const lastAt = (s) => (s.info.log.length ? s.info.log[s.info.log.length - 1].at : '');
     const latest = items.reduce((a, b) => (lastAt(b) > lastAt(a) ? b : a));
@@ -180,6 +189,8 @@ export async function buildSnapshot(opts = {}) {
       name: base,
       path: root,
       status,
+      agents: ['claude', 'gpt', 'deepseek'].filter((agent) => items.some((s) => s.agent === agent)),
+      working: ['claude', 'gpt', 'deepseek'].filter((agent) => items.some((s) => s.agent === agent && s.status !== 'rest')),
       pending: asks.length,
       ask: asks.length ? asks[0].ask : '',
       sessions: items.length,
@@ -187,6 +198,7 @@ export async function buildSnapshot(opts = {}) {
       commits,
       kid: commits !== null && commits < cfg.kidCommits,
       home: homeOf(cfg.homes, base, key),
+      alias: aliasOf(cfg.aliases || {}, base, key),
       subs: subs.slice(0, MAX_SUBS),
       subCount: subs.length,
       doing: latest.info.doing,

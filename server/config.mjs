@@ -8,6 +8,7 @@ export const DEFAULTS = Object.freeze({
   port: DEFAULT_PORT,
   autoStart: true,
   homes: {},
+  aliases: {},
   hide: [],
   fallbackMinutes: 20,
   staleHours: 6,
@@ -33,10 +34,15 @@ export function normalizeConfig(raw) {
   if (plainObj(c.homes)) {
     for (const [k, v] of Object.entries(c.homes)) if (typeof v === 'string') homes[k] = v;
   }
+  const aliases = {};
+  if (plainObj(c.aliases)) {
+    for (const [k, v] of Object.entries(c.aliases)) if (typeof v === 'string' && v.trim()) aliases[k] = v.trim().slice(0, 20);
+  }
   return {
     port: Number.isInteger(c.port) ? num(c.port, 1, 65535, DEFAULT_PORT) : DEFAULT_PORT,
     autoStart: c.autoStart !== false,
     homes,
+    aliases,
     hide: Array.isArray(c.hide) ? c.hide.filter((x) => typeof x === 'string' && x) : [],
     fallbackMinutes: num(c.fallbackMinutes, 0, 24 * 60, DEFAULTS.fallbackMinutes),
     staleHours: num(c.staleHours, 0.05, 24 * 30, DEFAULTS.staleHours),
@@ -84,6 +90,6 @@ export function demoPort(cfg = loadConfig()) {
 
 /** setup 이 처음 만들어 두는 config.json 내용 */
 export function defaultConfigText() {
-  const { port, autoStart, homes, hide, fallbackMinutes, staleHours, kidCommits, lang } = DEFAULTS;
-  return JSON.stringify({ port, autoStart, homes, hide, fallbackMinutes, staleHours, kidCommits, lang }, null, 2) + '\n';
+  const { port, autoStart, homes, aliases, hide, fallbackMinutes, staleHours, kidCommits, lang } = DEFAULTS;
+  return JSON.stringify({ port, autoStart, homes, aliases, hide, fallbackMinutes, staleHours, kidCommits, lang }, null, 2) + '\n';
 }

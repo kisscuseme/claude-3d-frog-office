@@ -26,6 +26,8 @@ function fresh() {
   const base = path.join(tmp, `e${++envN}`);
   process.env.CLAUDE_CONFIG_DIR = path.join(base, 'cfg');
   process.env.CLAUDE_OFFICE_HOME = path.join(base, 'home');
+  process.env.CODEX_HOME = path.join(base, 'codex');
+  process.env.XDG_DATA_HOME = path.join(base, 'data');
   fs.mkdirSync(path.join(base, 'home', 'sessions'), { recursive: true });
   fs.mkdirSync(path.join(base, 'cfg', 'projects'), { recursive: true });
   forgetSnap();
@@ -65,7 +67,9 @@ test('형식: 최상위·Person 필드 전부', async () => {
   assert.ok(!Number.isNaN(Date.parse(s.now)));
   assert.equal(s.people.length, 1);
   const p = s.people[0];
-  assert.deepEqual(Object.keys(p).sort(), ['ask', 'commits', 'doing', 'home', 'id', 'kid', 'log', 'name', 'path', 'pending', 'sessions', 'source', 'status', 'subCount', 'subs'].sort());
+  assert.deepEqual(Object.keys(p).sort(), ['agents', 'working', 'alias', 'ask', 'commits', 'doing', 'home', 'id', 'kid', 'log', 'name', 'path', 'pending', 'sessions', 'source', 'status', 'subCount', 'subs'].sort());
+  assert.deepEqual(p.agents, ['claude']);
+  assert.deepEqual(p.working, ['claude']);
   assert.equal(p.id, path.resolve(cwd));
   assert.equal(p.name, 'my-app');
   assert.equal(p.status, 'working');
@@ -147,13 +151,15 @@ test('숨김·homes·이름 겹침', async () => {
     transcript(cwd, s, [asst(iso(1000), [read('/x/y')], 'tool_use')]);
     putCard(s, { kind: 'working', cwd, updatedAt: iso(2000), ...live });
   }
-  const s = await snap({ hide: ['secret'], homes: { backend: 'server', [a]: 'server', app: 'kitchen' } });
+  const s = await snap({ hide: ['secret'], homes: { backend: 'server', [a]: 'server', app: 'kitchen' }, aliases: { backend: '두부', x: ' ' } });
   const names = s.people.map((p) => p.name).sort();
   assert.deepEqual(names, ['app (one)', 'app (two)', 'backend']);
   const by = Object.fromEntries(s.people.map((p) => [p.name, p]));
   assert.equal(by.backend.home, 'server');
   assert.equal(by['app (one)'].home, 'server'); // 경로로 지정
   assert.equal(by['app (two)'].home, null); // "server" 가 아닌 값은 무시
+  assert.equal(by.backend.alias, '두부');
+  assert.equal(by['app (two)'].alias, null);
   forgetSnap();
   const s2 = await snap({ hide: [b] });
   assert.equal(s2.people.filter((p) => p.name === 'app').length, 1); // 겹침이 풀리면 이름도 원래대로
@@ -269,4 +275,92 @@ test('청소: 하루 넘은 ended 카드·7일 넘은 카드 파일을 치운다
   putCard('ok', { kind: 'rest', updatedAt: iso(1000) });
   assert.equal(cleanupCards(), 2);
   assert.deepEqual(fs.readdirSync(dir).sort(), ['endedNew.json', 'ok.json']);
+});
+
+function codex(cwd, id, rows, date = new Date()) {
+  const dir = path.join(process.env.CODEX_HOME, 'sessions', String(date.getFullYear()), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0'));
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `rollout-${id}.jsonl`);
+  fs.writeFileSync(file, [{ type: 'session_meta', payload: { id, cwd } }, ...rows].map((x) => JSON.stringify(x)).join('\n') + '\n');
+  return file;
+}
+const codexRow = (type, payload) => ({ timestamp: new Date().toISOString(), type, payload });
+
+test('Codex 활동·완료·중단·오래된 기록과 기록용 줄', async () => {
+  const base = fresh();
+  const cwd = folder(base, 'codex');
+  const previous = new Date();
+  previous.setDate(previous.getDate() - 1);
+  const file = codex(cwd, 'active', [
+    codexRow('response_item', { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '**hello**' }] }),
+    codexRow('response_item', { type: 'function_call', name: 'shell_command', arguments: JSON.stringify({ command: 'npm test' }) }),
+    codexRow('response_item', { type: 'custom_tool_call', name: 'apply_patch', input: '*** Begin Patch\n*** Update File: src/app.js\n' }),
+    codexRow('event_msg', { type: 'task_complete' }),
+    codexRow('event_msg', { type: 'token_count' }),
+  ], previous);
+  const old = codex(folder(base, 'old-codex'), 'old', [codexRow('event_msg', { type: 'task_started' })]);
+  fs.utimesSync(old, (Date.now() - 3600000) / 1000, (Date.now() - 3600000) / 1000);
+  let [p] = (await snap()).people;
+  assert.deepEqual(p.agents, ['gpt']);
+  assert.deepEqual(p.working, []);
+  assert.equal(p.status, 'rest');
+  assert.deepEqual(p.log.map(({ k, a }) => [k, a]), [['text', 'hello'], ['test', ''], ['edit', 'app.js']]);
+  fs.appendFileSync(file, JSON.stringify(codexRow('event_msg', { type: 'task_started' })) + '\n');
+  [p] = (await snap()).people;
+  assert.deepEqual(p.working, ['gpt']);
+  fs.appendFileSync(file, JSON.stringify(codexRow('event_msg', { type: 'turn_aborted' })) + '\n');
+  [p] = (await snap()).people;
+  assert.equal(p.status, 'rest');
+  assert.equal((await snap({ hide: ['codex'] })).people.length, 0);
+});
+
+test('Claude·Codex·OpenCode 같은 프로젝트 합치기 및 idle', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { return t.skip('node:sqlite 없음'); }
+  const base = fresh();
+  const cwd = folder(base, 'merged');
+  transcript(cwd, 'claude', [asst(iso(1000), [read('/x/a.js')], 'tool_use')]);
+  putCard('claude', { kind: 'decision', cwd, updatedAt: iso(500), ...live });
+  codex(cwd, 'gpt', [codexRow('event_msg', { type: 'task_complete' })]);
+  codex(cwd, 'gpt-active', [codexRow('event_msg', { type: 'task_started' })]);
+  const dbDir = path.join(process.env.XDG_DATA_HOME, 'opencode');
+  fs.mkdirSync(dbDir, { recursive: true });
+  const db = new DatabaseSync(path.join(dbDir, 'opencode.db'));
+  try {
+    db.exec('CREATE TABLE session_v2 (id TEXT, directory TEXT, time_updated INTEGER, time_idle INTEGER, model TEXT, time_archived INTEGER); CREATE TABLE session_message (session_id TEXT, seq INTEGER, type TEXT, data TEXT, time_created INTEGER)');
+    const now = Date.now();
+    const insert = db.prepare('INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?, ?)');
+    insert.run('d', cwd, now - 1000, null, 'anything', null);
+    insert.run('old', folder(base, 'old-deepseek'), now - 3600000, null, 'x', null);
+    insert.run('archived', folder(base, 'archived'), now, null, 'x', now);
+    db.prepare('INSERT INTO session_message VALUES (?, ?, ?, ?, ?)').run('d', 1, 'assistant', JSON.stringify({ content: [{ type: 'reasoning', text: 'skip' }, { type: 'tool', name: 'read', state: { input: { path: '/x/deep.js' } } }] }), now - 1000);
+    let [p] = (await snap()).people;
+    assert.deepEqual(p.agents, ['claude', 'gpt', 'deepseek']);
+    assert.deepEqual(p.working, ['claude', 'gpt', 'deepseek']);
+    assert.equal(p.sessions, 4);
+    assert.equal(p.status, 'decision');
+    assert.ok(p.log.some((a) => a.k === 'read' && a.a === 'deep.js'));
+    db.prepare('UPDATE session_v2 SET time_idle = time_updated WHERE id = ?').run('d');
+    [p] = (await snap()).people;
+    assert.deepEqual(p.working, ['claude', 'gpt']);
+    assert.equal((await snap({ hide: ['merged'] })).people.length, 0);
+  } finally { db.close(); }
+});
+
+test('OpenCode 오래 조용한 세션은 rest, 다른 스키마는 무시', async (t) => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import('node:sqlite')); } catch { return t.skip('node:sqlite 없음'); }
+  const base = fresh();
+  const dir = path.join(process.env.XDG_DATA_HOME, 'opencode');
+  fs.mkdirSync(dir, { recursive: true });
+  const db = new DatabaseSync(path.join(dir, 'opencode.db'));
+  try {
+    db.exec('CREATE TABLE session_v2 (id TEXT, directory TEXT, time_updated INTEGER, time_idle INTEGER, model TEXT, time_archived INTEGER); CREATE TABLE session_message (session_id TEXT, seq INTEGER, type TEXT, data TEXT, time_created INTEGER)');
+    db.prepare('INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?, ?)').run('d', folder(base, 'quiet'), Date.now() - 11 * 60000, null, 'x', null);
+    const [p] = (await snap()).people;
+    assert.equal(p.status, 'rest');
+    assert.deepEqual(p.working, []);
+    db.exec('DROP TABLE session_message');
+    assert.deepEqual((await snap()).people, []);
+  } finally { db.close(); }
 });

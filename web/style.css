@@ -58,12 +58,17 @@ button { font: inherit; color: inherit; }
 @keyframes o-flash { 0%, 30% { background: #FFF6C9; border-color: #E5C64A; } }
 .o-head { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 4px 8px; text-align: left;
   font-size: 14px; background: none; border: 0; cursor: pointer; }
-.o-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.o-head b { flex-shrink: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .o-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .o-chip { flex-shrink: 0; padding: 0 6px; border-radius: 4px; font-size: 13px; background: #EEF1EF; color: #44504A; }
 .o-chip.work { background: var(--work-bg); color: var(--work); }
 .o-chip.ask { background: var(--ask-bg); color: var(--ask); }
 .o-chip.sub { background: var(--sub-bg); color: var(--sub); }
+.o-proj { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #7A857F; }
+.o-chip.ag-gpt { color: #10A37F; }
+.o-chip.ag-deepseek { color: #4D6BFE; }
+.o-chip.ag-gpt.on { background: #10A37F; color: #FFF; }
+.o-chip.ag-deepseek.on { background: #4D6BFE; color: #FFF; }
 .o-doing, .o-sub { margin: 0 8px 0 23px; font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
 .o-doing.ask { color: var(--ask); font-weight: 600; }

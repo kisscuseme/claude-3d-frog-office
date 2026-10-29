@@ -77,12 +77,15 @@ PermissionRequest 는 승인 창이 뜨는 즉시, Notification(permission_promp
   "name": "my-app",                // 표시 이름 = 루트 폴더 이름(같은 이름이 둘이면 "my-app (parent)")
   "path": "/Users/me/my-app",
   "status": "working",             // "working" | "decision" | "rest"  (세션들 중 decision > working > rest)
+  "agents": ["claude", "gpt", "deepseek"], // 합쳐진 에이전트 종류(중복 없이 이 순서)
+  "working": ["gpt"],               // working 또는 decision 인 세션의 에이전트(같은 순서)
   "pending": 0,                    // 승인 대기 중인 세션 수
   "ask": "Claude needs your permission to use Bash",   // decision 일 때 문구(≤80자), 아니면 ""
   "sessions": 1,                   // 합쳐진 세션 수
   "source": "hook",                // "hook" | "transcript"(대체 모드로만 잡힌 경우)
   "commits": 123,                  // git rev-list --count HEAD (10분 캐시), 못 세면 null
   "kid": false,                    // commits != null && commits < 50 → 70% 꼬마
+  "alias": null,                   // 설정 aliases 로 준 별칭, 없으면 null(화면이 이름으로 별칭을 지어 붙인다)
   "home": null,                    // "server" 면 서버실에서 일한다(설정 homes 로 지정). 그 밖엔 null
   "subs": [ { "id": "a1b2", "type": "Explore", "desc": "find auth code", "doing": Act|null } ],  // 최대 12
   "subCount": 1,                   // 실제로 일하는 서브에이전트 수(12 초과 가능)
@@ -103,7 +106,10 @@ PermissionRequest 는 승인 창이 뜨는 즉시, Notification(permission_promp
 | read | Read | 파일 이름(basename) |
 | edit | Edit·MultiEdit·NotebookEdit | 파일 이름 |
 | write | Write | 파일 이름 |
-| bash | Bash | description 44자, 없으면 command 앞 40자 |
+| bash | Bash | description 44자(Claude 가 쓴 자연어) |
+| test·check·build·install·serve·gitlook·gitsave·gitsync·github·look·browser·files·wait | description 없는 Bash, codex·OpenCode 셸 명령(`shellAct`) | "" — 명령 원문은 넘기지 않는다 |
+| run | 위와 같음, 스크립트 실행 | 스크립트 파일 이름 |
+| shell | 위와 같음, 모르는 명령 | 프로그램 이름 20자 |
 | grep | Grep | pattern 24자 |
 | glob | Glob | pattern 28자 |
 | fetch | WebFetch | URL 호스트 이름 |
@@ -119,13 +125,14 @@ thinking·빈 글은 건너뛴다. 대화 기록 형식은 Claude Code 내부 �
 ## 5. 설정 (`~/.claude-office/config.json`, 없어도 됨)
 
 ```json
-{ "port": 4777, "autoStart": true, "homes": { "my-main-project": "server" },
+{ "port": 4777, "autoStart": true, "homes": { "my-main-project": "server" }, "aliases": { "my-app": "두부" },
   "hide": ["scratch"], "fallbackMinutes": 20, "staleHours": 6, "kidCommits": 50, "lang": "auto" }
 ```
 
 - `port` — 서버 포트(환경변수 `CLAUDE_OFFICE_PORT` 가 우선). 서버는 **127.0.0.1 에만** 붙는다.
 - `autoStart` — SessionStart 훅이 서버가 꺼져 있으면 백그라운드로 띄운다(재부팅 뒤에도 Claude 만 켜면 화면이 산다).
 - `homes` — 프로젝트 이름(또는 경로) → "server" 면 그 캐릭터는 서버실에 서서 일한다.
+- `aliases` — 프로젝트 이름(또는 경로) → 캐릭터 별칭(20자). 없으면 화면이 이름으로 별칭을 골라 준다.
 - `hide` — 사무실에 안 띄울 프로젝트 이름·경로.
 - `lang` — "auto" | "ko" | "en". 화면에 그대로 전달(`GET /api/config`).
 

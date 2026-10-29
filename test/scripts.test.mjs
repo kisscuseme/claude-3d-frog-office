@@ -35,6 +35,8 @@ const env = {
   ...process.env,
   CLAUDE_CONFIG_DIR: path.join(tmp, 'cfg'),
   CLAUDE_OFFICE_HOME: path.join(tmp, 'home'),
+  CODEX_HOME: path.join(tmp, 'codex'),
+  XDG_DATA_HOME: path.join(tmp, 'data'),
   CLAUDE_OFFICE_PORT: String(port),
 };
 const run = (script, ...args) => spawnSync(process.execPath, [path.join(REPO, 'scripts', script), ...args], { env, encoding: 'utf8', timeout: 30000 });

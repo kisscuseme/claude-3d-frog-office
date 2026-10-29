@@ -29,7 +29,7 @@ const OfficeLife = (() => {
   const shuffle = arr => arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(v => v[1]);
   // 사건 — 글은 화면이 언어에 맞게 만든다(key = i18n 의 ev.* , arg = 끼워 넣을 말)
   function event(p, key, arg = "") {
-    L.events.push({ at: Date.now(), id: p.id, name: p.name, color: p.color, key, arg });
+    L.events.push({ at: Date.now(), id: p.id, name: p.nick || p.name, color: p.color, key, arg });
     if (L.events.length > 80) L.events.splice(0, L.events.length - 80);
   }
 
@@ -425,7 +425,7 @@ const OfficeLife = (() => {
       const wasDesk = L.desks.get(p.id);
       Object.assign(p, { name: d.name, status: d.status, ask: d.ask || "", kid: !!d.kid, home: d.home || null,
                          doing: d.doing || "", subCount: d.subCount || 0, subs: d.subs || [], commits: d.commits,
-                         path0: d.path });
+                         path0: d.path, working: d.working || [], nick: d.nick || "" });
       if (fresh) {
         if (L.synced) {                              // 나중에 켠 세션 = 문으로 출근
           p.x = OFFICE_NODES.out[0]; p.y = OFFICE_NODES.out[1]; p.alpha = 0;
@@ -587,6 +587,6 @@ const OfficeLife = (() => {
     }
   }
 
-  return { L, SIT_DESK, sync, update, cut, nearest, route, colorOf, speciesOf, modeOf, blocked, onFloor,
+  return { L, SIT_DESK, sync, update, cut, nearest, route, hash, colorOf, speciesOf, modeOf, blocked, onFloor,
            drainEvents: () => L.events.splice(0, L.events.length) };
 })();

@@ -78,19 +78,38 @@ const I18N = (() => {
       grep: "🔍 '{a}' 찾는 중", glob: "🔍 {a} 파일 찾는 중", fetch: "🌐 {a} 읽는 중", search: "🌐 '{a}' 검색 중",
       agent: "🐣 서브에이전트에게 맡김: {a}", todo: "🗒️ 할 일 정리 중", skill: "📚 {a} 펼치는 중",
       mcp: "🔌 {a} 쓰는 중", tool: "⚙️ {a} 쓰는 중",
+      test: "🧪 테스트 돌려 보는 중", check: "🧹 코드 검사하는 중", build: "🏗️ 빌드하는 중", install: "📦 패키지 설치하는 중",
+      serve: "🚀 서버 띄우는 중", gitlook: "🌿 변경 내역 살펴보는 중", gitsave: "🌿 변경 사항 정리하는 중",
+      gitsync: "🌿 저장소 주고받는 중", github: "🐙 GitHub 확인하는 중", look: "🔍 코드 둘러보는 중",
+      browser: "🖥️ 브라우저로 확인하는 중", files: "📁 파일 정리하는 중", wait: "⏳ 결과 기다리는 중",
+      run: "▶️ {a} 실행하는 중", shell: "⌨️ {a} 실행하는 중",
     },
     en: {
       text: "💬 {a}", read: "📖 Reading {a}", edit: "✏️ Editing {a}", write: "📝 Writing {a}", bash: "🔧 {a}",
       grep: "🔍 Searching '{a}'", glob: "🔍 Finding files {a}", fetch: "🌐 Reading {a}", search: "🌐 Searching '{a}'",
       agent: "🐣 Delegated: {a}", todo: "🗒️ Updating the to-do list", skill: "📚 Opening skill {a}",
       mcp: "🔌 Using {a}", tool: "⚙️ Using {a}",
+      test: "🧪 Running tests", check: "🧹 Checking the code", build: "🏗️ Building", install: "📦 Installing packages",
+      serve: "🚀 Starting a server", gitlook: "🌿 Looking at changes", gitsave: "🌿 Tidying up changes",
+      gitsync: "🌿 Syncing the repo", github: "🐙 Checking GitHub", look: "🔍 Looking around the code",
+      browser: "🖥️ Checking in a browser", files: "📁 Organizing files", wait: "⏳ Waiting for results",
+      run: "▶️ Running {a}", shell: "⌨️ Running {a}",
     },
   };
   // 인자가 비었을 때 대신 넣는 말
   const ACT_EMPTY = {
-    ko: { read: "파일", edit: "파일", write: "파일", fetch: "웹", bash: "명령 실행 중", agent: "일", tool: "도구", mcp: "도구" },
-    en: { read: "a file", edit: "a file", write: "a file", fetch: "the web", bash: "Running a command", agent: "a task",
+    ko: { read: "파일", edit: "파일", write: "파일", fetch: "웹", bash: "명령 실행 중", run: "스크립트", shell: "터미널 명령", agent: "일", tool: "도구", mcp: "도구" },
+    en: { read: "a file", edit: "a file", write: "a file", fetch: "the web", bash: "Running a command", run: "a script", shell: "a terminal command", agent: "a task",
           tool: "a tool", mcp: "a tool" },
+  };
+
+  // 캐릭터 별칭 — 두 언어 같은 순서(같은 칸 = 같은 친구). 설정 aliases 가 있으면 그게 먼저.
+  const NICKS = {
+    ko: ["개굴이", "몽글이", "콩이", "두부", "라떼", "모찌", "보리", "호두", "율무", "단팥", "찹쌀", "감자", "고구마", "망고",
+         "쿠키", "젤리", "땅콩", "도토리", "누룽지", "자두", "앵두", "솜사탕", "꿀떡", "만두", "호빵", "깨찰", "참깨", "푸딩"],
+    en: ["Ribbit", "Fluffy", "Bean", "Tofu", "Latte", "Mochi", "Barley", "Walnut", "Pearl", "Redbean", "Rice", "Potato",
+         "Yam", "Mango", "Cookie", "Jelly", "Peanut", "Acorn", "Crispy", "Plum", "Cherry", "Candy", "Honey", "Dumpling",
+         "Bun", "Sesame", "Seed", "Pudding"],
   };
 
   // 대사 — 말풍선 한 줄. 수다는 주고받는 맛이 나게 묻고 답하는 말을 섞는다.
@@ -225,6 +244,6 @@ const I18N = (() => {
   return {
     get lang() { return lang; },
     init, setLang, onChange: f => listeners.push(f),
-    t, lines, act, ask, ev, time, cut,
+    t, lines, act, ask, ev, time, cut, nicks: () => NICKS[lang],
   };
 })();

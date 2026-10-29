@@ -37,7 +37,7 @@ async function scratchEnv() {
   fs.mkdirSync(path.join(base, 'cfg'), { recursive: true });
   return {
     base,
-    env: { ...process.env, CLAUDE_CONFIG_DIR: path.join(base, 'cfg'), CLAUDE_OFFICE_HOME: path.join(base, 'home'), CLAUDE_OFFICE_PORT: String(await freePort()) },
+    env: { ...process.env, CLAUDE_CONFIG_DIR: path.join(base, 'cfg'), CLAUDE_OFFICE_HOME: path.join(base, 'home'), CODEX_HOME: path.join(base, 'codex'), XDG_DATA_HOME: path.join(base, 'data'), CLAUDE_OFFICE_PORT: String(await freePort()) },
   };
 }
 const run = (script, args, env) => spawnSync(process.execPath, [path.join(REPO, 'scripts', script), ...args], { env, encoding: 'utf8', timeout: 30000 });

@@ -3,10 +3,10 @@ import { API_VERSION } from './snapshot.mjs';
 
 const LOG_N = 8;
 const CAST = [
-  { name: 'my-app', commits: 812, sessions: 2 },
+  { name: 'my-app', commits: 812, sessions: 2, agents: ['claude', 'gpt'] },
   { name: 'api-server', commits: 340, home: 'server' },
-  { name: 'docs-site', commits: 23 },
-  { name: 'ml-pipeline', commits: 156 },
+  { name: 'docs-site', commits: 23, sessions: 2, agents: ['claude', 'deepseek'] },
+  { name: 'ml-pipeline', commits: 156, sessions: 2, agents: ['claude', 'gpt'] },
   { name: 'mobile-client', commits: 1290 },
   { name: 'infra-scripts', commits: 41 },
   { name: 'playground', commits: null },
@@ -16,7 +16,7 @@ const ACTS = [
   ['write', 'notes.md'], ['bash', 'Run unit tests'], ['bash', 'Install dependencies'],
   ['grep', 'TODO'], ['glob', 'src/**/*.ts'], ['fetch', 'developer.mozilla.org'],
   ['search', 'node fs watch'], ['agent', 'find auth code'], ['todo', ''], ['skill', 'pdf'],
-  ['mcp', 'query'], ['tool', 'NotebookRead'], ['text', 'Tests pass now. Next I will clean up the router.'],
+  ['mcp', 'query'], ['tool', 'NotebookRead'], ['test', ''], ['gitlook', ''], ['browser', ''], ['run', 'migrate.py'], ['text', 'Tests pass now. Next I will clean up the router.'],
 ];
 const ASKS = [
   'Claude needs your permission to use Bash',
@@ -104,6 +104,8 @@ export function createDemo(seed = 7, start = Date.now()) {
           name: p.name,
           path: `/demo/${p.name}`,
           status: p.status,
+          agents: p.agents || ['claude'],
+          working: p.status === 'rest' ? [] : (p.agents || ['claude']),
           pending: p.status === 'decision' ? 1 : 0,
           ask: p.ask,
           sessions: p.sessions || 1,
@@ -111,6 +113,7 @@ export function createDemo(seed = 7, start = Date.now()) {
           commits: p.commits,
           kid: p.commits !== null && p.commits < 50,
           home: p.home || null,
+          alias: null,
           subs: p.subs.map((s) => ({ ...s })),
           subCount: p.subs.length,
           doing: last ? { k: last.k, a: last.a } : null,
